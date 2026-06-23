@@ -85,6 +85,41 @@ function buildFitFilter(srcW, srcH, tgtW, tgtH, opts = {}) {
 }
 
 /**
+ * 计算 fill(cover)策略:把 (srcW, srcH) 裁切铺满目标容器 (tgtW, tgtH)
+ * 返回 ffmpeg filter 字符串(scale 放大到能盖住容器 + 按焦点 crop)
+ *
+ * 与 buildFitFilter(contain,加黑边)相反:
+ * - fit  = 整张塞进容器,留黑边(横屏→竖屏会缩成中间一小条)
+ * - fill = 裁掉两侧/上下,主体铺满容器(横屏舞台口播→竖屏抠讲者)
+ *
+ * 焦点(focusX/focusY,0..1):裁切窗口在被裁维度上的位置。
+ * - 0.5 居中;横屏舞台讲者通常中偏右,focusX≈0.5~0.62 能把人留在画面里。
+ *
+ * 例子(1920×1080 → 1080×1920,focusX=0.55):
+ *   先 scale 到 3413×1920(force_original_aspect_ratio=increase 盖住容器),
+ *   再 crop 1080×1920,x = (3413-1080)*0.55 ≈ 1283(讲者居中偏右)。
+ */
+function buildFillFilter(srcW, srcH, tgtW, tgtH, opts = {}) {
+    const stripTopPx = Math.max(0, Number(opts.stripTopWatermarkPx) || 0);
+    const clamp01 = (n, dft) => {
+        const v = Number(n);
+        if (!Number.isFinite(v)) return dft;
+        return Math.min(1, Math.max(0, v));
+    };
+    const focusX = clamp01(opts.focusX, 0.5);
+    const focusY = clamp01(opts.focusY, 0.5);
+    let chain = '';
+    // 先 crop 顶部水印(可选),与 fit 一致
+    if (stripTopPx > 0 && stripTopPx < srcH) {
+        chain += `crop=${srcW}:${srcH - stripTopPx}:0:${stripTopPx},`;
+    }
+    // scale 到盖住容器(任一维度 ≥ 目标),再按焦点 crop 到精确目标
+    chain += `scale=${tgtW}:${tgtH}:force_original_aspect_ratio=increase:flags=lanczos,`;
+    chain += `crop=${tgtW}:${tgtH}:(iw-${tgtW})*${focusX}:(ih-${tgtH})*${focusY}`;
+    return chain;
+}
+
+/**
  * 判断视频是否已经是目标尺寸(允许 ±2 px 容差)
  */
 function isAlreadyFit(srcW, srcH, tgtW, tgtH) {
@@ -99,6 +134,9 @@ function isAlreadyFit(srcW, srcH, tgtW, tgtH) {
  * @param {object} opts
  * @param {string} opts.targetRatio  '9:16' | '1:1' | '16:9'(默认 '9:16')
  * @param {number} opts.stripTopWatermarkPx  顶部 crop 像素(去直播水印,默认 0)
+ * @param {boolean} opts.fill  true=裁切铺满(cover,抠主体);false=加黑边(contain,默认)
+ * @param {number} opts.focusX fill 模式下裁切窗口横向焦点 0..1(默认 0.5;横屏讲者中偏右用 0.55~0.62)
+ * @param {number} opts.focusY fill 模式下裁切窗口纵向焦点 0..1(默认 0.5)
  * @param {string} opts.crf  libx264 CRF(默认 '18')
  * @param {string} opts.preset libx264 preset(默认 'medium')
  * @returns {{ skipped: boolean, srcSize: {width,height}, tgtSize: {width,height}, filter: string }}
@@ -116,6 +154,7 @@ function fitVideo(inputPath, outputPath, opts = {}) {
     const tgtW = preset.width;
     const tgtH = preset.height;
     const stripTopPx = Math.max(0, Number(opts.stripTopWatermarkPx) || 0);
+    const fill = !!opts.fill;
 
     // 已是目标尺寸 + 不需要 crop → 直接 hardlink/copy
     if (isAlreadyFit(src.width, src.height, tgtW, tgtH) && stripTopPx === 0) {
@@ -130,7 +169,13 @@ function fitVideo(inputPath, outputPath, opts = {}) {
         };
     }
 
-    const filter = buildFitFilter(src.width, src.height, tgtW, tgtH, { stripTopWatermarkPx: stripTopPx });
+    const filter = fill
+        ? buildFillFilter(src.width, src.height, tgtW, tgtH, {
+            stripTopWatermarkPx: stripTopPx,
+            focusX: opts.focusX,
+            focusY: opts.focusY,
+        })
+        : buildFitFilter(src.width, src.height, tgtW, tgtH, { stripTopWatermarkPx: stripTopPx });
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 
     // 编码器:Darwin 默认硬件 h264_videotoolbox(48 分钟长视频软件 x264 medium 要 1-2 小时,
@@ -178,6 +223,7 @@ module.exports = {
     fitVideo,
     probeWidthHeight,
     buildFitFilter,
+    buildFillFilter,
     isAlreadyFit,
     TARGET_PRESETS,
 };

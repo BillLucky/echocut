@@ -201,7 +201,19 @@ module.exports = async function burn(file, opts) {
                 const C = { gray: '\x1b[90m', reset: '\x1b[0m', cyan: '\x1b[36m', green: '\x1b[32m' };
                 console.log(`${C.cyan}[auto-pad]${C.reset} ${srcSize.width}×${srcSize.height} → ${targetW}×${targetH}${stripTopPx > 0 ? `,strip top ${stripTopPx}px` : ''}`);
                 const t0 = Date.now();
-                const r = fitVideo(abs, padOut, { targetRatio, stripTopWatermarkPx: stripTopPx });
+                // --fill:裁切铺满(cover,抠主体),横屏舞台口播→竖屏只留讲者;
+                // 默认(不加 --fill)仍是 scale+pad 加黑边,保持旧行为不变。
+                const fillMode = !!opts.fill;
+                const focusX = opts.focusX != null && opts.focusX !== '' ? Number(opts.focusX) : undefined;
+                if (fillMode) {
+                    console.log(`${C.cyan}[auto-pad]${C.reset} fill 模式:裁切铺满(抠主体)${focusX != null ? `,焦点 x=${focusX}` : ''}`);
+                }
+                const r = fitVideo(abs, padOut, {
+                    targetRatio,
+                    stripTopWatermarkPx: stripTopPx,
+                    fill: fillMode,
+                    focusX,
+                });
                 const dt = ((Date.now() - t0) / 1000).toFixed(1);
                 if (r.skipped) {
                     console.log(`${C.gray}[auto-pad]${C.reset} 已是目标尺寸,跳过${C.green}(${dt}s)${C.reset}`);

@@ -16,6 +16,7 @@ const assert = require('node:assert/strict');
 
 const {
     buildFitFilter,
+    buildFillFilter,
     isAlreadyFit,
     TARGET_PRESETS,
     fitVideo,
@@ -77,6 +78,35 @@ test('buildFitFilter: stripTopWatermarkPx 超过源视频高度 → 忽略(不�
 test('buildFitFilter: stripTopWatermarkPx=0 不加 crop', () => {
     const f = buildFitFilter(960, 720, 1080, 1920, { stripTopWatermarkPx: 0 });
     assert.ok(!f.includes('crop='));
+});
+
+// ─── buildFillFilter(cover 裁切铺满,抠主体) ────────────────────────────
+
+test('buildFillFilter: 16:9 → 9:16 横屏舞台口播抠讲者(cover,不加黑边)', () => {
+    const f = buildFillFilter(1920, 1080, 1080, 1920, { focusX: 0.55 });
+    assert.ok(f.includes('force_original_aspect_ratio=increase'), `应 cover 放大: ${f}`);
+    assert.ok(f.includes('crop=1080:1920'), `应 crop 到目标尺寸: ${f}`);
+    assert.ok(!f.includes('pad='), `fill 模式不应加黑边: ${f}`);
+    assert.ok(f.includes('*0.55'), `focusX 应注入横向偏移: ${f}`);
+});
+
+test('buildFillFilter: focusX 默认 0.5 居中', () => {
+    const f = buildFillFilter(1920, 1080, 1080, 1920, {});
+    assert.ok(f.includes('(iw-1080)*0.5'), `默认应居中: ${f}`);
+});
+
+test('buildFillFilter: focusX 越界(>1 / <0 / NaN)被钳到 [0,1] / 默认', () => {
+    assert.ok(buildFillFilter(1920, 1080, 1080, 1920, { focusX: 5 }).includes('*1'), '5 → 1');
+    assert.ok(buildFillFilter(1920, 1080, 1080, 1920, { focusX: -3 }).includes('*0'), '-3 → 0');
+    assert.ok(buildFillFilter(1920, 1080, 1080, 1920, { focusX: 'x' }).includes('*0.5'), 'NaN → 0.5');
+});
+
+test('buildFillFilter: stripTopWatermarkPx > 0 先 crop 顶部再 cover', () => {
+    const f = buildFillFilter(1920, 1080, 1080, 1920, { stripTopWatermarkPx: 60 });
+    const stripIdx = f.indexOf('crop=1920:1020:0:60');
+    const scaleIdx = f.indexOf('scale=');
+    assert.ok(stripIdx >= 0, `应先 crop 顶部 60px: ${f}`);
+    assert.ok(stripIdx < scaleIdx, 'strip crop 应在 scale 之前');
 });
 
 // ─── isAlreadyFit ───────────────────────────────────────────────────────

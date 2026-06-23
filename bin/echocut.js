@@ -49,6 +49,8 @@ program
     .option('--golden-duration <sec>', '(配合 --golden-hook)钩子时长,默认 3.0', '3.0')
     .option('--auto-pad', 'v0.13:输入不是目标比例时自动 scale+pad 到 1080×1920(panel/直播录屏 4:3 源必备)')
     .option('--strip-top <px>', '(配合 --auto-pad)裁掉顶部 N 像素去除直播平台水印(如"NNNN人看过"条),默认 0')
+    .option('--fill', '(配合 --auto-pad)裁切铺满(cover,抠主体)而非加黑边;横屏舞台口播→竖屏只留讲者')
+    .option('--focus-x <n>', '(配合 --fill)裁切横向焦点 0..1,默认 0.5 居中;横屏讲者中偏右用 0.55~0.62')
     .option('--no-subtitle', 'v0.17:跳过 ASR/字幕烧录(剪映/Premiere 已自带字幕场景);顶部标题+品牌胶囊+封面+BGM+CTA+宣发包全保留')
     .option('--reuse-captions <file>', '复用现成 captions.json,跳过转写+LLM纠错(同视频换比例/样式快速重渲染)')
     .option('--fresh', '强制重新转写,绕过转写缓存(默认同源视频命中缓存秒跳转写)')

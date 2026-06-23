@@ -233,4 +233,9 @@ module.exports = async function articleFromClip(file, opts) {
     console.log(timeline.summary());
     console.log(`\n${C.green}✓${C.reset} article-from-clip 完成。产出:`);
     console.log(`   ${C.cyan}${path.join(dir, 'products')}/seg-*/article-*.md${C.reset}\n`);
+
+    // 活干完显式退出:文章已 writeFileSync 落盘,但到 Ollama / 本地 mlx server 的
+    // keep-alive 连接会让 node 事件循环一直不空,进程跑完不退出、空挂(实测 1h+)。
+    // CLI 一次性任务,显式 exit(0) 最稳,不留僵尸进程占资源。
+    process.exit(0);
 };
